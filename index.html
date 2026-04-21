@@ -236,16 +236,18 @@ async function binSave(data){
 
 async function init(){
   const remote=await binLoad();
+  console.log('init remote._seeded:', remote?._seeded, 'fr.length:', (remote?.fr||[]).length);
   if(remote){
     const fr=(remote.fr||[]).map(migrate);
     const db=(remote.debout||[]).map(migrate);
     if(!remote._seeded){
-      // Première ouverture : seed + flag
+      console.log('SEEDING...');
       const t=today();
       DATA.fr=[{id:genId(),date:t,followers:{...SEED.fr},posts:{},reactions:{}}];
       DATA.debout=[{id:genId(),date:t,followers:{...SEED.debout},posts:{},reactions:{}}];
       await binSave({...DATA, _seeded:true});
     }else{
+      console.log('LOADING from bin, fr entries:', fr.length);
       if(fr.length>0)DATA.fr=fr;
       else if(DATA.fr.length===0)DATA.fr=[{id:genId(),date:today(),followers:{...SEED.fr},posts:{},reactions:{}}];
       if(db.length>0)DATA.debout=db;
