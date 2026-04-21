@@ -216,7 +216,10 @@ async function binLoad(){
     const r=await fetch(BIN_URL+'/latest?nocache='+Date.now(),{headers:{'X-Master-Key':API_KEY,'X-Bin-Meta':false}});
     if(!r.ok){const t=await r.text();console.error('binLoad error',r.status,t);setSyncStatus('err','Erreur '+r.status);return null;}
     const j=await r.json();
-    return j.record||{fr:[],debout:[]};
+    console.log('binLoad raw:', JSON.stringify(j).slice(0,200));
+    const record = j.record !== undefined ? j.record : j;
+    console.log('binLoad _seeded:', record._seeded, '_ts:', record._ts);
+    return record;
   }catch(e){console.error('binLoad exception',e);setSyncStatus('err','Erreur réseau');return null;}
 }
 
