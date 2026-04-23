@@ -137,13 +137,31 @@ footer{padding:12px 20px;text-align:center;font-size:11px;color:var(--th);border
       <div class="form-date">
         <label>Date de saisie</label>
         <input type="date" id="entry-date" onchange="checkOverwrite()">
+        <a id="buffer-link" href="" target="_blank" style="margin-left:8px;font-size:12px;color:var(--ts);text-decoration:underline">Voir sur Buffer →</a>
       </div>
       <div id="overwrite-warn" style="display:none" class="confirm-box">⚠️ Une saisie existe déjà pour cette date. Enregistrer écrasera les données existantes.</div>
       <div id="net-inputs" class="net-input-grid"></div>
-      <div class="form-actions">
+        <div class="form-actions">
         <button class="btn-cancel" onclick="cancelForm()">Annuler</button>
         <button class="btn-save" onclick="saveEntry()">Enregistrer</button>
       </div>
+    </div>
+
+    <div class="form-card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:3px">Import / Export Excel</div>
+          <div style="font-size:12px;color:var(--ts)">Télécharge le template, remplis-le, puis importe-le.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-cancel" onclick="downloadTemplate()">⬇ Template Excel</button>
+          <label style="padding:9px 16px;background:var(--tm);color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">
+            ⬆ Importer
+            <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importFile(this)">
+          </label>
+        </div>
+      </div>
+      <div id="import-result" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px"></div>
     </div>
   </div>
 
@@ -160,6 +178,7 @@ footer{padding:12px 20px;text-align:center;font-size:11px;color:var(--th);border
 
 <footer>Données partagées entre tous les utilisateurs du lien · Pense à exporter en CSV régulièrement pour garder un backup.</footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const BIN_ID = '69e77f9e36566621a8d7ddb6';
 const API_KEY = '$2a$10$OMpFWAyzFPzU9M6NGVEx..rJJJ6LyT7hDA58Bq3w3Tc.2kTiInSku';
@@ -182,7 +201,10 @@ const NETS_ENG=NETS.filter(n=>n.engagement);
 const NETS_VIEWS=NETS.filter(n=>n.views);
 const NETS_REACT=NETS.filter(n=>n.engagement&&!n.views);
 const DASH_PATTERNS=[[],[5,3],[2,2],[8,3],[4,2,1,2],[6,2,2,2],[3,1],[10,3,1,3],[5,5],[2,5]];
-const SEED={
+const BUFFER_URLS={
+  fr:'https://publish.buffer.com/insights?channels[]=6931c8fe29ea336fd64f0f5c&channels[]=697b451531b76c40ca0c471b&channels[]=697b447331b76c40ca0c4513&channels[]=694905cb457dae6a34a12135&channels[]=697c779c31b76c40ca1140b0&channels[]=697b424c31b76c40ca0c3e27&channels[]=697c769831b76c40ca113d10&channels[]=697c76b131b76c40ca113d6d&dateRange=last-7-days',
+  debout:'https://publish.buffer.com/insights?channels[]=68ef572f669affb4c96fcd88&channels[]=68ef559c669affb4c96fca34&channels[]=68ef5490669affb4c96fc4ac&channels[]=68ef55cc669affb4c96fcaa7&channels[]=68ef546b669affb4c96fc407&channels[]=68ef54aa669affb4c96fc575&channels[]=68fa5264669affb4c9826833&channels[]=68fa52ae669affb4c9826955&dateRange=last-7-days'
+};
   fr:{facebook:920448,x:449140,instagram:468736,tiktok:186900,linkedin:39296,bluesky:24235,threads:143750,youtube:253073,telegram:8884,whatsapp:14070},
   debout:{facebook:53445,x:7931,instagram:32778,tiktok:1606,linkedin:933,bluesky:827,threads:2815,youtube:2090,telegram:727,whatsapp:773}
 };
@@ -373,7 +395,7 @@ function renderRatioCards(entries){
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 function chartOpts(tickCb){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(180,165,145,.22)'},ticks:{color:'#9E9385',font:{size:10}}},y:{grid:{color:'rgba(180,165,145,.22)'},ticks:{color:'#9E9385',font:{size:10},callback:tickCb||(v=>fmt(v))}}}};}
 
-function buildLegendPills(cid,netList,key){
+function buildLegendPills(cid,netList,key,chartKey){
   const el=document.getElementById(cid);el.innerHTML='';
   netList.forEach(n=>{
     const pill=document.createElement('span');
@@ -382,7 +404,8 @@ function buildLegendPills(cid,netList,key){
     pill.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${n.color};margin-right:5px"></span>${n.name}`;
     pill.onclick=()=>{
       if(hiddenNets[key].has(n.id))hiddenNets[key].delete(n.id);else hiddenNets[key].add(n.id);
-      if(charts[key]){const ds=charts[key].data.datasets.find(d=>d.label===n.name);if(ds){ds.hidden=hiddenNets[key].has(n.id);charts[key].update();}}
+      const c=charts[chartKey||key];
+      if(c){const ds=c.data.datasets.find(d=>d.label===n.name);if(ds){ds.hidden=hiddenNets[key].has(n.id);c.update();}}
       pill.classList.toggle('hidden');
     };
     el.appendChild(pill);
@@ -400,20 +423,22 @@ function buildCharts(entries){
   destroyChart('delta');
   const deltas=entries.map((e,i)=>i===0?0:totalFollowers(e)-totalFollowers(entries[i-1]));
   charts['delta']=new Chart(document.getElementById('ch-delta').getContext('2d'),{type:'bar',data:{labels,datasets:[{data:deltas,backgroundColor:deltas.map(d=>d>=0?'rgba(42,125,95,.7)':'rgba(184,64,64,.7)'),borderRadius:4}]},options:chartOpts()});
-  destroyChart('nets');buildLegendPills('leg-followers',NETS,'followers');
+  destroyChart('nets');buildLegendPills('leg-followers',NETS,'followers','nets');
   charts['nets']=new Chart(document.getElementById('ch-nets').getContext('2d'),{type:'line',data:{labels,datasets:lineDS(entries,NETS,'followers','followers')},options:{...chartOpts(),plugins:{legend:{display:false}}}});
-  destroyChart('reactions');buildLegendPills('leg-reactions',NETS_REACT,'reactions');
+  destroyChart('reactions');buildLegendPills('leg-reactions',NETS_REACT,'reactions','reactions');
   charts['reactions']=new Chart(document.getElementById('ch-reactions').getContext('2d'),{type:'line',data:{labels,datasets:lineDS(entries,NETS_REACT,'reactions','reactions')},options:{...chartOpts(),plugins:{legend:{display:false}}}});
-  destroyChart('reactpost');buildLegendPills('leg-reactpost',NETS_REACT,'reactpost');
+  destroyChart('reactpost');buildLegendPills('leg-reactpost',NETS_REACT,'reactpost','reactpost');
   charts['reactpost']=new Chart(document.getElementById('ch-reactpost').getContext('2d'),{type:'line',data:{labels,datasets:NETS_REACT.map((n,i)=>({label:n.name,data:entries.map(e=>{const p=(e.posts||{})[n.id]||0,r=(e.reactions||{})[n.id]||0;return p?r/p:0;}),borderColor:n.color,backgroundColor:'transparent',borderDash:DASH_PATTERNS[i%10],tension:.3,pointRadius:2,borderWidth:2,hidden:hiddenNets['reactpost'].has(n.id)}))},options:{...chartOpts(v=>fmtD(v)),plugins:{legend:{display:false}}}});
-  destroyChart('views');buildLegendPills('leg-views',NETS_VIEWS,'views');
+  destroyChart('views');buildLegendPills('leg-views',NETS_VIEWS,'views','views');
   charts['views']=new Chart(document.getElementById('ch-views').getContext('2d'),{type:'line',data:{labels,datasets:lineDS(entries,NETS_VIEWS,'reactions','views')},options:{...chartOpts(),plugins:{legend:{display:false}}}});
-  destroyChart('viewspost');buildLegendPills('leg-viewspost',NETS_VIEWS,'viewspost');
+  destroyChart('viewspost');buildLegendPills('leg-viewspost',NETS_VIEWS,'viewspost','viewspost');
   charts['viewspost']=new Chart(document.getElementById('ch-viewspost').getContext('2d'),{type:'line',data:{labels,datasets:NETS_VIEWS.map((n,i)=>({label:n.name,data:entries.map(e=>{const p=(e.posts||{})[n.id]||0,r=(e.reactions||{})[n.id]||0;return p?r/p:0;}),borderColor:n.color,backgroundColor:'transparent',borderDash:DASH_PATTERNS[i%10],tension:.3,pointRadius:2,borderWidth:2,hidden:hiddenNets['viewspost'].has(n.id)}))},options:{...chartOpts(v=>fmtD(v)),plugins:{legend:{display:false}}}});
 }
 
 // FORM
 function renderForm(){
+  document.getElementById('buffer-link').href=BUFFER_URLS[entity];
+  document.getElementById('buffer-link').textContent='Voir réseaux '+(entity==='fr'?'FR':'Debout!')+' sur Buffer →';
   const d=document.getElementById('entry-date');
   if(editDate)d.value=editDate;else d.value=today();
   checkOverwrite();
